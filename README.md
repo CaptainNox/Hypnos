@@ -1,4 +1,4 @@
-# Hypnos by 
+# Hypnos 
 
 ## A more reliable way of calling syscalls directly
 
