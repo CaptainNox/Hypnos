@@ -3,4 +3,4 @@ project(Hypnos C)
 
 set(CMAKE_C_STANDARD 11)
 
-add_executable(Hypnos main.c src/includes/inject.h src/includes/sysgate.h src/inject.c src/main.c src/hypnos.c)
+add_executable(Hypnos main.c src/includes/inject.h src/includes/sysgate.h src/inject.c src/main.c src/hypnos.c src/hypnos.c util/hash.c)
