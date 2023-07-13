@@ -15,7 +15,7 @@ We do this because Hell's Gate fails when functions are hooked. This is more rel
 
 ### TODO
  - Add `hardware breakpoints to clean up the callstack
- - Add API hashing
+ - Add API hashing (DONE)
  - Runtime win api call resolving for ppid spoofing/pid searching
 
 ###` Credits

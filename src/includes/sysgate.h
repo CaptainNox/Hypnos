@@ -3,7 +3,7 @@
 #include <tlhelp32.h>
 
 typedef struct {
-    LPCSTR name;
+    unsigned long hash;
     WORD num;
 } SYSCALL_TABLE_ENTRY, * PSYSCALL_TABLE_ENTRY;
 

