@@ -18,6 +18,6 @@ We do this because Hell's Gate fails when functions are hooked. This is more rel
  - Add API hashing (DONE)
  - Runtime win api call resolving for ppid spoofing/pid searching
 
-###` Credits
+### Credits
  - [Original Hells Gate](https://github.com/am0nsec/HellsGate)
  - [0xCarnage](https://github.com/0xCarnage), thanks for the help :D
