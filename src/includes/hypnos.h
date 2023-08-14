@@ -2,6 +2,8 @@
 #include <windows.h>
 #include <tlhelp32.h>
 
+#define X64_PEB_OFFSET 0x60
+
 typedef struct {
     unsigned long hash;
     WORD num;

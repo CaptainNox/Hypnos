@@ -1,19 +1,55 @@
 #include <stdlib.h>
 
-#include "includes/sysgate.h"
+#include "includes/hypnos.h"
 #include "includes/Native.h"
 
-// Function prototypes
-void Hypnos_GetImageExportDirectory(LPVOID imageBase, PIMAGE_EXPORT_DIRECTORY* ppNtdllExportDirectory);
-void* Hypnos_GetProcAddress(PVOID imageBase, unsigned long toFind);
-WORD Hypnos_GetSyscallNumber(void* addr);
-DWORD FindProcess(const char* name);
-HANDLE SpoofProcessPPID(LPCSTR toSpawn, LPCSTR parentName);
-void* getNtdllCopy();
+#pragma region GlobalVariables
 
-// External function prototypes
-extern void PrepareSyscall(DWORD syscallNum);
-extern NTSTATUS InvokeSyscall();
+HANDLE mainThread;
+HANDLE hNtdllCopy;
+
+#pragma endregion
+
+#pragma region PatternMatching
+
+BOOL MaskCompare(const BYTE* pData, const BYTE* bMask, const char* szMask)
+{
+    for (; *szMask; ++szMask, ++pData, ++bMask)
+        if (*szMask == 'x' && *pData != *bMask)
+            return FALSE;
+    return TRUE;
+}
+
+DWORD_PTR FindPattern(DWORD_PTR dwAddress, DWORD dwLen, PBYTE bMask, PCHAR szMask)
+{
+    for (DWORD i = 0; i < dwLen; i++)
+        if (MaskCompare((PBYTE)(dwAddress + i), bMask, szMask))
+            return (DWORD_PTR)(dwAddress + i);
+
+    return 0;
+}
+
+DWORD_PTR FindInModule(LPCSTR moduleName, PBYTE bMask, PCHAR szMask)
+{
+    DWORD_PTR dwAddress = 0;
+    PIMAGE_DOS_HEADER imageBase = (PIMAGE_DOS_HEADER)GetModuleHandleA(moduleName);
+
+    if (!imageBase)
+        return 0;
+
+    DWORD_PTR sectionOffset = (DWORD_PTR)imageBase + imageBase->e_lfanew + sizeof(IMAGE_NT_HEADERS);
+
+    if (!sectionOffset)
+        return 0;
+
+    PIMAGE_SECTION_HEADER textSection = (PIMAGE_SECTION_HEADER)(sectionOffset);
+    dwAddress = FindPattern((DWORD_PTR)imageBase + textSection->VirtualAddress, textSection->SizeOfRawData, bMask, szMask);
+    return dwAddress;
+}
+
+#pragma endregion
+
+#pragma region PebParsing
 
 unsigned long djb2_hash(const char* str) {
     unsigned long hash = 5381;
@@ -25,26 +61,25 @@ unsigned long djb2_hash(const char* str) {
     return hash;
 }
 
+UINT64 GetModuleAddress(LPWSTR moduleName) {
+    PPEB peb = (PPEB)__readgsqword(X64_PEB_OFFSET);
+    LIST_ENTRY* ModuleList = NULL;
 
-PSYSCALL_TABLE InitSyscalls() {
-    PSYSCALL_TABLE table = (PSYSCALL_TABLE)malloc(sizeof(SYSCALL_TABLE));
-    LPVOID ntdllCopy = getNtdllCopy();
-    
-    table->NtAllocateVirtualMemory.hash = 0x5bb3894b6793c34c;
-    table->NtAllocateVirtualMemory.num = Hypnos_GetSyscallNumber(
-            Hypnos_GetProcAddress(ntdllCopy, table->NtAllocateVirtualMemory.hash));
-    
-    table->NtProtectVirtualMemory.hash = 0x80e0d54f082962c8;
-    table->NtProtectVirtualMemory.num = Hypnos_GetSyscallNumber(
-            Hypnos_GetProcAddress(ntdllCopy, table->NtProtectVirtualMemory.hash));
-    
-    table->NtCreateThreadEx.hash = 0x8dcc6f8fcb0c2130;
-    table->NtCreateThreadEx.num = Hypnos_GetSyscallNumber(Hypnos_GetProcAddress(ntdllCopy, table->NtCreateThreadEx.hash));
-    
-    table->ZwOpenProcess.hash = 0xfe98fb589b524a87;
-    table->ZwOpenProcess.num = Hypnos_GetSyscallNumber(Hypnos_GetProcAddress(ntdllCopy, table->ZwOpenProcess.hash));
+    if (!moduleName)
+        return 0;
 
-    return table;
+    for (LIST_ENTRY* pListEntry = peb->Ldr->InMemoryOrderModuleList.Flink;
+         pListEntry != &peb->Ldr->InMemoryOrderModuleList;
+         pListEntry = pListEntry->Flink)
+    {
+
+        PLDR_DATA_TABLE_ENTRY pEntry = CONTAINING_RECORD(pListEntry, LDR_DATA_TABLE_ENTRY, InMemoryOrderLinks);
+
+        if (wcsstr(pEntry->FullDllName.Buffer, moduleName)) {
+            return (UINT64)pEntry->DllBase;
+        }
+    }
+    return 0;
 }
 
 void Hypnos_GetImageExportDirectory(LPVOID imageBase, PIMAGE_EXPORT_DIRECTORY* ppNtdllExportDirectory) {
@@ -56,54 +91,44 @@ void Hypnos_GetImageExportDirectory(LPVOID imageBase, PIMAGE_EXPORT_DIRECTORY* p
     *ppNtdllExportDirectory = (PIMAGE_EXPORT_DIRECTORY)((PBYTE)imageBase + ntHeaders->OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_EXPORT].VirtualAddress);
 }
 
-void* Hypnos_GetProcAddress(PVOID imageBase, unsigned long toFind) {
-	PIMAGE_EXPORT_DIRECTORY pNtdllExportDirectory;
+void* GetSymbolAddress(PVOID imageBase, unsigned long toFind) {
+    PIMAGE_EXPORT_DIRECTORY pNtdllExportDirectory;
     Hypnos_GetImageExportDirectory(imageBase, &pNtdllExportDirectory);
 
-	PDWORD pdwFunctionNames = (PDWORD)((PBYTE)imageBase + pNtdllExportDirectory->AddressOfNames);
-	PDWORD pdwFunctionAddresses = (PDWORD)((PBYTE)imageBase + pNtdllExportDirectory->AddressOfFunctions);
-	PWORD pwAddressOfNameOrdinals = (PWORD)((PBYTE)imageBase + pNtdllExportDirectory->AddressOfNameOrdinals);
+    PDWORD pdwFunctionNames = (PDWORD)((PBYTE)imageBase + pNtdllExportDirectory->AddressOfNames);
+    PDWORD pdwFunctionAddresses = (PDWORD)((PBYTE)imageBase + pNtdllExportDirectory->AddressOfFunctions);
+    PWORD pwAddressOfNameOrdinals = (PWORD)((PBYTE)imageBase + pNtdllExportDirectory->AddressOfNameOrdinals);
 
-	// Walking over exported functions 
-	for (int i = 0; i < pNtdllExportDirectory->NumberOfNames; i++) {
-		// Grabbing function name and function address
-		char* pFunctionName = (char*)((PBYTE)imageBase + pdwFunctionNames[i]);
-		void* pFunctionAddress = (PBYTE)imageBase + pdwFunctionAddresses[pwAddressOfNameOrdinals[i]]; 
+    // Walking over exported functions
+    for (int i = 0; i < pNtdllExportDirectory->NumberOfNames; i++) {
+        // Grabbing function name and function address
+        char* pFunctionName = (char*)((PBYTE)imageBase + pdwFunctionNames[i]);
+        void* pFunctionAddress = (PBYTE)imageBase + pdwFunctionAddresses[pwAddressOfNameOrdinals[i]];
 
-		if (djb2_hash(pFunctionName) == toFind) return pFunctionAddress;
-	}
-
-	return NULL;
-}
-
-WORD Hypnos_GetSyscallNumber(void* addr) {
-	return (WORD)*((PBYTE)addr + 4);
-}
-
-void* getNtdllCopy() {
-    // Gets a HANDLE to NTDLL via suspended process method
-    HANDLE childHandle = SpoofProcessPPID("calc.exe", "explorer.exe");
-    if (childHandle == INVALID_HANDLE_VALUE) {
-        printf("[!] Could not create child process\n");
-        return NULL;
+        if (djb2_hash(pFunctionName) == toFind) return pFunctionAddress;
     }
 
-    // Parsing headers from NTDLL
-    HMODULE moduleNtdll = GetModuleHandleA("ntdll");
-    PIMAGE_DOS_HEADER ntdllDosHeader =(PIMAGE_DOS_HEADER)moduleNtdll;
-    PIMAGE_NT_HEADERS  ntdllNtHeaders = (PIMAGE_NT_HEADERS)((PBYTE)ntdllDosHeader + (BYTE)ntdllDosHeader->e_lfanew);
-    DWORD ntdllSize = ntdllNtHeaders->OptionalHeader.SizeOfImage;
+    return NULL;
+}
 
-    LPVOID ntdllCopy = HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, ntdllSize);
-    if (!ReadProcessMemory(childHandle, moduleNtdll, ntdllCopy, ntdllSize, NULL)) {
-        printf("[!] Could not read process memory to ntdllCopy, %d\n", GetLastError());
-        return NULL;
-    }
+#pragma endregion
 
-    WaitForSingleObjectEx(GetCurrentProcess(), 2000, TRUE);
-    TerminateProcess(childHandle, 0);
+DWORD FindProcess(LPCSTR name) {
+    HANDLE hSnapshot = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
+    if (hSnapshot == INVALID_HANDLE_VALUE) return -1;
 
-    return ntdllCopy;
+    PROCESSENTRY32 processentry32;
+    processentry32.dwSize = sizeof(PROCESSENTRY32);
+
+    if (!Process32First(hSnapshot, &processentry32)) return -1;
+
+    do {
+        if (strcmp(processentry32.szExeFile, name) == 0) {
+            return processentry32.th32ProcessID;
+        }
+    } while (Process32Next(hSnapshot, &processentry32));
+
+    return -1;
 }
 
 HANDLE SpoofProcessPPID(LPCSTR toSpawn, LPCSTR parentName) {
@@ -134,20 +159,39 @@ HANDLE SpoofProcessPPID(LPCSTR toSpawn, LPCSTR parentName) {
     return processInformation.hProcess;
 }
 
-DWORD FindProcess(LPCSTR name) {
-    HANDLE hSnapshot = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
-    if (hSnapshot == INVALID_HANDLE_VALUE) return -1;
+void* GetNtdllCopy() {
+    // Gets a HANDLE to NTDLL via suspended process method
+    HANDLE childHandle = SpoofProcessPPID("calc.exe", "explorer.exe");
+    if (childHandle == INVALID_HANDLE_VALUE) {
+        printf("[!] Could not create child process\n");
+        return NULL;
+    }
 
-    PROCESSENTRY32 processentry32;
-    processentry32.dwSize = sizeof(PROCESSENTRY32);
+    // Parsing headers from NTDLL
+    HMODULE moduleNtdll = GetModuleHandleA("ntdll");
+    PIMAGE_DOS_HEADER ntdllDosHeader =(PIMAGE_DOS_HEADER)moduleNtdll;
+    PIMAGE_NT_HEADERS  ntdllNtHeaders = (PIMAGE_NT_HEADERS)((PBYTE)ntdllDosHeader + (BYTE)ntdllDosHeader->e_lfanew);
+    DWORD ntdllSize = ntdllNtHeaders->OptionalHeader.SizeOfImage;
 
-    if (!Process32First(hSnapshot, &processentry32)) return -1;
+    LPVOID ntdllCopy = HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, ntdllSize);
+    if (!ReadProcessMemory(childHandle, moduleNtdll, ntdllCopy, ntdllSize, NULL)) {
+        printf("[!] Could not read process memory to ntdllCopy, %d\n", GetLastError());
+        return NULL;
+    }
 
-    do {
-        if (strcmp(processentry32.szExeFile, name) == 0) {
-            return processentry32.th32ProcessID;
-        }
-    } while (Process32Next(hSnapshot, &processentry32));
+    WaitForSingleObjectEx(GetCurrentProcess(), 2000, TRUE);
+    TerminateProcess(childHandle, 0);
 
-    return -1;
+    return ntdllCopy;
+}
+
+WORD GetSyscallNumber(void* addr) {
+    return (WORD)*((PBYTE)addr + 4);
+}
+
+BOOL InitHypnos() {
+    // Getting current thread, and handle to clean copy of NTDLL
+    mainThread = GetCurrentThread();
+    hNtdllCopy = GetNtdllCopy();
+
 }

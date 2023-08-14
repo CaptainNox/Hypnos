@@ -1,5 +1,5 @@
 #pragma once
 #include <windows.h>
-#include "sysgate.h"
+#include "hypnos.h"
 
 void ShellcodeInject(PSYSCALL_TABLE syscallTable);
