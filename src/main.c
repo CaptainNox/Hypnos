@@ -1,7 +1,6 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-#include "includes/inject.h"
 #include "includes/hypnos.h"
 
 #define PRINT_SUCCESS(msg) printf("[+] %s\n", msg);

@@ -14,6 +14,6 @@ SOURCE 			= $(wildcard src/*.c)
 
 all: x64
 
-x64: src/syscall.o
-	$(COMPILER_x64) src/*.o $(INCLUDE) $(SOURCE) $(CFLAGS) -o bin/hypnos.exe -DDEBUG -lntdll -DWIN_X64
+x64: src/
+	$(COMPILER_x64) $(INCLUDE) $(SOURCE) $(CFLAGS) -o bin/hypnos.exe -DDEBUG -lntdll -DWIN_X64
 
