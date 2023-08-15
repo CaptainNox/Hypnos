@@ -349,5 +349,8 @@ BOOL InitHypnos() {
 }
 
 BOOL DeinitHypnos() {
+    CloseHandle(hNtdllCopy);
+    CloseHandle(hNtdll);
+
     return RemoveVectoredExceptionHandler(exceptionHandlerHandle) != 0;
 }
