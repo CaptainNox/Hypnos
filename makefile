@@ -6,7 +6,7 @@ COMPILER_x64 		= x86_64-w64-mingw32-gcc
 CFLAGS 			= -masm=intel
 
 INCLUDE			= -I include
-SOURCE 			= $(wildcard src/*.c)
+SOURCE 			= $(wildcard example/*.c)
 
 %.o : %.asm
 	echo "[-] Building syscall.asm"
@@ -14,6 +14,6 @@ SOURCE 			= $(wildcard src/*.c)
 
 all: x64
 
-x64: src/syscall.o
-	$(COMPILER_x64) src/*.o $(INCLUDE) $(SOURCE) $(CFLAGS) -o bin/hypnos.exe -DDEBUG -lntdll -DWIN_X64
+x64: example/
+	$(COMPILER_x64) $(INCLUDE) $(SOURCE) $(CFLAGS) -o bin/hypnos.exe -DDEBUG -lntdll -DWIN_X64
 

@@ -1,6 +1,6 @@
 # Hypnos 
 
-## A more reliable way of calling syscalls directly
+## A more reliable way of calling syscalls indirectly
 
 ### How does Hypnos work?
 
@@ -13,11 +13,13 @@ Because the NTDLL copy is being made from a suspended process, the Win API funct
 
 We do this because Hell's Gate fails when functions are hooked. This is more reliable than Halo's gate, because we don't have to rely on SSNs being incremental.
 
-### TODO
- - Add `hardware breakpoints to clean up the callstack
- - Add API hashing (DONE)
- - Runtime win api call resolving for ppid spoofing/pid searching
+### Features
+
+ - PPID spoofing for suspended process
+ - Calling syscalls indirectly
+ - Utilizing hardware breakpoints to create a clean callstack
 
 ### Credits
  - [Original Hells Gate](https://github.com/am0nsec/HellsGate)
- - [0xCarnage](https://github.com/0xCarnage), thanks for the help :D
+ - [0xCarnage](https://github.com/0xCarnage), thanks for the help
+ - [HWSyscalls](https://github.com/ShorSec/HWSyscalls)
