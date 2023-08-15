@@ -234,6 +234,11 @@ BOOL SetMainBreakpoint() {
     return TRUE;
 }
 
+BOOL IsHooked(DWORD64 functionAddress) {
+    char syscallStub[] = { 0x4C,0x8B,0xD1,0xB8 };
+    return !FindPattern(functionAddress, 4, (PBYTE)syscallStub, (PCHAR)"xxxx");
+}
+
 LONG HWSyscallExceptionHandler(EXCEPTION_POINTERS* ExceptionInfo) {
     if (ExceptionInfo->ExceptionRecord->ExceptionCode == EXCEPTION_SINGLE_STEP) {
         if (ExceptionInfo->ContextRecord->Rip == (DWORD64)&PrepareSyscall) {
@@ -270,12 +275,8 @@ LONG HWSyscallExceptionHandler(EXCEPTION_POINTERS* ExceptionInfo) {
 
             DWORD64 pFunctionAddress = ExceptionInfo->ContextRecord->Rip;
 
-            char nonHookedSyscallBytes[] = { 0x4C,0x8B,0xD1,0xB8 };
-            if (FindPattern(pFunctionAddress, 4, (PBYTE)nonHookedSyscallBytes, (PCHAR)"xxxx")) {
-                printf("[+] Function is not hooked\n");
-                printf("[+] Continuing with normal execution\n");
-            }
-            else {
+
+            if (IsHooked(pFunctionAddress)) {
                 printf("[+] Function is hooked!\n");
 
                 WORD syscallNumber = FindSyscallNumber(GetSymbolAddress(hNtdllCopy, ntFunctionName));
@@ -294,7 +295,6 @@ LONG HWSyscallExceptionHandler(EXCEPTION_POINTERS* ExceptionInfo) {
                 //Set RIP to syscall;ret; opcode address
                 printf("[+] Jumping to \"syscall;ret;\" opcode address: 0x%I64X\n", syscallReturnAddress);
                 ExceptionInfo->ContextRecord->Rip = syscallReturnAddress;
-
             }
 
             // Move breakpoint back to PrepareSyscall to catch the next invoke
