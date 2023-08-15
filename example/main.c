@@ -1,7 +1,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-#include "../src/includes/hypnos.h"
+#include "../src/hypnos.h"
 
 #define NT_SUCCESS(Status) (((NTSTATUS)(Status)) >= 0)
 
