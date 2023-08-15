@@ -24,4 +24,3 @@ We do this because Hell's Gate fails when functions are hooked. This is more rel
  - [0xCarnage](https://github.com/0xCarnage), thanks for the help
  - [HWSyscalls](https://github.com/ShorSec/HWSyscalls)
 clear
- - 
