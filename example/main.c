@@ -1,7 +1,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-#include "includes/hypnos.h"
+#include "../src/includes/hypnos.h"
 
 #define NT_SUCCESS(Status) (((NTSTATUS)(Status)) >= 0)
 
@@ -44,10 +44,6 @@ void* CustomCopyMemory(void *dest, const void *src, size_t len) {
 }
 
 int main(int argc, char* argv[]) {
-    if (InitHypnos()) {
-        printf("[+] Hypnos initialized successfully!\n");
-    }
-
     char msgBox[] = "\x48\x83\xEC\x28\x48\x83\xE4\xF0\x48\x8D\x15\x66\x00\x00\x00"
                     "\x48\x8D\x0D\x52\x00\x00\x00\xE8\x9E\x00\x00\x00\x4C\x8B\xF8"
                     "\x48\x8D\x0D\x5D\x00\x00\x00\xFF\xD0\x48\x8D\x15\x5F\x00\x00"
@@ -77,6 +73,10 @@ int main(int argc, char* argv[]) {
                     "\x24\x30\x4C\x8B\xE7\xA4\x80\x3E\x2E\x75\xFA\xA4\xC7\x07\x44"
                     "\x4C\x4C\x00\x49\x8B\xCC\x41\xFF\xD7\x49\x8B\xCC\x48\x8B\xD6"
                     "\xE9\x14\xFF\xFF\xFF\x48\x03\xC3\x48\x83\xC4\x28\xC3";
+
+    if (InitHypnos()) {
+        printf("[+] Hypnos initialized successfully!\n");
+    }
 
     PVOID buffer = NULL;
     SIZE_T size = sizeof(msgBox);
