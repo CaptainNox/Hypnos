@@ -167,8 +167,7 @@ void* GetNtdllCopy() {
     }
 
     // Parsing headers from NTDLL
-    HMODULE moduleNtdll = GetModuleHandleA("ntdll");
-    PIMAGE_DOS_HEADER ntdllDosHeader =(PIMAGE_DOS_HEADER)moduleNtdll;
+    PIMAGE_DOS_HEADER ntdllDosHeader = (PIMAGE_DOS_HEADER)hNtdll;
     PIMAGE_NT_HEADERS  ntdllNtHeaders = (PIMAGE_NT_HEADERS)((PBYTE)ntdllDosHeader + (BYTE)ntdllDosHeader->e_lfanew);
     DWORD ntdllSize = ntdllNtHeaders->OptionalHeader.SizeOfImage;
 

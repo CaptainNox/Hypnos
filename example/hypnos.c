@@ -167,13 +167,12 @@ void* GetNtdllCopy() {
     }
 
     // Parsing headers from NTDLL
-    HMODULE moduleNtdll = GetModuleHandleA("ntdll");
-    PIMAGE_DOS_HEADER ntdllDosHeader =(PIMAGE_DOS_HEADER)moduleNtdll;
+    PIMAGE_DOS_HEADER ntdllDosHeader = (PIMAGE_DOS_HEADER)hNtdll;
     PIMAGE_NT_HEADERS  ntdllNtHeaders = (PIMAGE_NT_HEADERS)((PBYTE)ntdllDosHeader + (BYTE)ntdllDosHeader->e_lfanew);
     DWORD ntdllSize = ntdllNtHeaders->OptionalHeader.SizeOfImage;
 
     LPVOID ntdllCopy = HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, ntdllSize);
-    if (!ReadProcessMemory(childHandle, moduleNtdll, ntdllCopy, ntdllSize, NULL)) {
+    if (!ReadProcessMemory(childHandle, hNtdll, ntdllCopy, ntdllSize, NULL)) {
         printf("[!] Could not read process memory to ntdllCopy, %d\n", GetLastError());
         return NULL;
     }
