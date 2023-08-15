@@ -3,20 +3,19 @@
 #include <tlhelp32.h>
 
 #define X64_PEB_OFFSET 0x60
+#define STACK_ARGS_LENGTH 8
+#define STACK_ARGS_RSP_OFFSET 0x28
 
-typedef struct {
-    unsigned long hash;
-    WORD num;
-} SYSCALL_TABLE_ENTRY, * PSYSCALL_TABLE_ENTRY;
+typedef BOOL(WINAPI* GetThreadContext_t)(
+_In_ HANDLE hThread,
+_Inout_ LPCONTEXT lpContext
+);
 
-typedef struct {
-    SYSCALL_TABLE_ENTRY NtAllocateVirtualMemory;
-    SYSCALL_TABLE_ENTRY NtProtectVirtualMemory;
-    SYSCALL_TABLE_ENTRY NtCreateThreadEx;
-    SYSCALL_TABLE_ENTRY ZwOpenProcess;
-} SYSCALL_TABLE, * PSYSCALL_TABLE;
+typedef BOOL(WINAPI* SetThreadContext_t)(
+_In_ HANDLE hThread,
+_In_ CONST CONTEXT* lpContext
+);
 
-extern void PrepareSyscall(DWORD num);
-extern NTSTATUS InvokeSyscall();
-
-PSYSCALL_TABLE InitSyscalls();
+BOOL InitHypnos();
+BOOL DeinitHypnos();
+DWORD PrepareSyscall(PCHAR symbolName);

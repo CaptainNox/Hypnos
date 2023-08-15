@@ -3,12 +3,32 @@
 
 #include "includes/hypnos.h"
 
-#define PRINT_SUCCESS(msg) printf("[+] %s\n", msg);
+#define NT_SUCCESS(Status) (((NTSTATUS)(Status)) >= 0)
+
+typedef NTSTATUS(NTAPI* pNtAllocateVirtualMemory_t)(
+        HANDLE ProcessHandle,
+        PVOID *BaseAddress,
+        ULONG_PTR ZeroBits,
+        PSIZE_T RegionSize,
+        ULONG AllocationType,
+        ULONG Protect
+        );
 
 int main() {
-    //PSYSCALL_TABLE syscallTable = InitSyscalls();
-    PRINT_SUCCESS("Initialized syscall table!");
+    if (InitHypnos()) {
+        printf("[+] Hypnos initialized successfully!\n");
+    }
 
-    getchar();
+    pNtAllocateVirtualMemory_t pNtAllocateVirtualMemory = (pNtAllocateVirtualMemory_t)PrepareSyscall((char*)"NtAllocateVirtualMemory");
+
+    PVOID remoteBuffer = NULL;
+    SIZE_T length = 120;
+
+    NTSTATUS status = pNtAllocateVirtualMemory((HANDLE)-1, &remoteBuffer, 0, &length, MEM_COMMIT, PAGE_READWRITE);
+
+    if (NT_SUCCESS(status)) {
+        printf("[+] Allocated memory successfully!\n");
+    }
+
     return 0;
 }
