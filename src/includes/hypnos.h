@@ -18,4 +18,4 @@ _In_ CONST CONTEXT* lpContext
 
 BOOL InitHypnos();
 BOOL DeinitHypnos();
-DWORD PrepareSyscall(PCHAR symbolName);
+UINT64 PrepareSyscall(PCHAR symbolName);
