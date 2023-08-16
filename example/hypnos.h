@@ -1,6 +1,9 @@
 #pragma once
+#include <stdio.h>
 #include <windows.h>
 #include <tlhelp32.h>
+
+#include "Native.h"
 
 #define X64_PEB_OFFSET 0x60
 #define STACK_ARGS_LENGTH 8

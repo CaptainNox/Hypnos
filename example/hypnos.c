@@ -1,5 +1,4 @@
 #include "hypnos.h"
-#include "Native.h"
 
 #pragma region GlobalVariables
 
@@ -172,7 +171,7 @@ void* GetNtdllCopy() {
     DWORD ntdllSize = ntdllNtHeaders->OptionalHeader.SizeOfImage;
 
     LPVOID ntdllCopy = HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, ntdllSize);
-    if (!ReadProcessMemory(childHandle, moduleNtdll, ntdllCopy, ntdllSize, NULL)) {
+    if (!ReadProcessMemory(childHandle, hNtdll, ntdllCopy, ntdllSize, NULL)) {
         printf("[!] Could not read process memory to ntdllCopy, %d\n", GetLastError());
         return NULL;
     }
@@ -273,8 +272,6 @@ LONG HWSyscallExceptionHandler(EXCEPTION_POINTERS* ExceptionInfo) {
             printf("[+] Original stack arguments successfully copied over to the new stack\n");
 
             DWORD64 pFunctionAddress = ExceptionInfo->ContextRecord->Rip;
-
-
             if (IsHooked(pFunctionAddress)) {
                 printf("[+] Function is hooked!\n");
 
