@@ -172,7 +172,7 @@ void* GetNtdllCopy() {
     DWORD ntdllSize = ntdllNtHeaders->OptionalHeader.SizeOfImage;
 
     LPVOID ntdllCopy = HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, ntdllSize);
-    if (!ReadProcessMemory(childHandle, hNtdll, ntdllCopy, ntdllSize, NULL)) {
+    if (!ReadProcessMemory(childHandle, moduleNtdll, ntdllCopy, ntdllSize, NULL)) {
         printf("[!] Could not read process memory to ntdllCopy, %d\n", GetLastError());
         return NULL;
     }
@@ -278,7 +278,7 @@ LONG HWSyscallExceptionHandler(EXCEPTION_POINTERS* ExceptionInfo) {
             if (IsHooked(pFunctionAddress)) {
                 printf("[+] Function is hooked!\n");
 
-                WORD syscallNumber = FindSyscallNumber(GetSymbolAddress(hNtdllCopy, ntFunctionName));
+                WORD syscallNumber = FindSyscallNumber(GetSymbolAddress((UINT64)hNtdllCopy, ntFunctionName));
                 printf("[+] Found syscall number: 0x%x\n", syscallNumber);
                 DWORD64 syscallReturnAddress = FindSyscallReturnAddress(pFunctionAddress, syscallNumber);
 

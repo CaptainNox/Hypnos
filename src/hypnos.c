@@ -278,7 +278,7 @@ LONG HWSyscallExceptionHandler(EXCEPTION_POINTERS* ExceptionInfo) {
             if (IsHooked(pFunctionAddress)) {
                 printf("[+] Function is hooked!\n");
 
-                WORD syscallNumber = FindSyscallNumber(GetSymbolAddress(hNtdllCopy, ntFunctionName));
+                WORD syscallNumber = FindSyscallNumber(GetSymbolAddress((UINT64)hNtdllCopy, ntFunctionName));
                 printf("[+] Found syscall number: 0x%x\n", syscallNumber);
                 DWORD64 syscallReturnAddress = FindSyscallReturnAddress(pFunctionAddress, syscallNumber);
 
