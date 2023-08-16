@@ -101,7 +101,8 @@ int main(int argc, char* argv[]) {
     HANDLE thread = INVALID_HANDLE_VALUE;
 
     pNtCreateThreadEx_t pNtCreateThreadEx = (pNtCreateThreadEx_t)PrepareSyscall((char*)"NtCreateThreadEx");
-    if (NT_SUCCESS(pNtCreateThreadEx(&thread, 0x1FFFFF, NULL, (HANDLE)-1, (LPTHREAD_START_ROUTINE)buffer, NULL, FALSE, NULL, NULL, NULL, NULL))) {
+    NTSTATUS status = pNtCreateThreadEx(&thread, 0x1FFFFF, NULL, (HANDLE)-1, (LPTHREAD_START_ROUTINE)buffer, NULL, FALSE, 0, 0, 0, NULL);
+    if (NT_SUCCESS(status)) {
         printf("[+] Successfully started thread!\n");
     }
 
