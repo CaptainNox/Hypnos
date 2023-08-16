@@ -16,7 +16,6 @@ UINT64 regBackup;
 
 #pragma region BinaryPatternMatching
 // @janoglezcampos, @idov31 - https://github.com/Idov31/Cronos/blob/master/src/Utils.c
-
 BOOL MaskCompare(const BYTE* pData, const BYTE* bMask, const char* szMask)
 {
     for (; *szMask; ++szMask, ++pData, ++bMask)
@@ -54,7 +53,7 @@ DWORD_PTR FindInModule(LPCSTR moduleName, PBYTE bMask, PCHAR szMask)
 
 #pragma endregion
 
-#pragma region PEBGetProcAddress
+#pragma region PebParsing
 
 UINT64 GetModuleAddress(LPWSTR moduleName) {
     PPEB peb = (PPEB)__readgsqword(X64_PEB_OFFSET);
