@@ -3,8 +3,6 @@
 
 #include "../src/hypnos.h"
 
-#define NT_SUCCESS(Status) (((NTSTATUS)(Status)) >= 0)
-
 typedef NTSTATUS(NTAPI* pNtAllocateVirtualMemory_t)(
         HANDLE ProcessHandle,
         PVOID *BaseAddress,
