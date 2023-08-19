@@ -27,16 +27,15 @@ typedef NTSTATUS(NTAPI* pNtCreateThreadEx_t)(
         LPTHREAD_START_ROUTINE lpStartAddress,
         LPVOID lpParameter,
         BOOL CreateSuspended,
-        DWORD dwStackSize,
-        DWORD Unknown1,
-        DWORD Unknown2,
+        SIZE_T dwStackSize,
+        SIZE_T Unknown1,
+        SIZE_T Unknown2,
         LPVOID Unknown3
         );
 
 void* CustomCopyMemory(void *dest, const void *src, size_t len) {
     char *d = dest;
-    const char *s = src;
-    while (len--)
+    const char *s = src; while (len--)
         *d++ = *s++;
     return dest;
 }
