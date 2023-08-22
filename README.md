@@ -27,8 +27,6 @@ First of all, you have to use the `InitHypnos()`. This will place the initial br
 Then, you need to prepare the syscall by calling `PrepareSyscall()`.
 Now you can execute the NTAPI function as you wish!
 
-Look at the example in `example/` for a code snippet.
-
 ### Credits
  - [Original Hells Gate](https://github.com/am0nsec/HellsGate)
  - [0xCarnage](https://github.com/0xCarnage), thanks for the help
