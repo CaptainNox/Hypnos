@@ -1,0 +1,31 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.6.33815.320
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "Hypnos", "Hypnos\Hypnos.vcxproj", "{D210570B-F1A0-4B66-9301-F7A54978C178}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|x64 = Debug|x64
+		Debug|x86 = Debug|x86
+		Release|x64 = Release|x64
+		Release|x86 = Release|x86
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{D210570B-F1A0-4B66-9301-F7A54978C178}.Debug|x64.ActiveCfg = Debug|x64
+		{D210570B-F1A0-4B66-9301-F7A54978C178}.Debug|x64.Build.0 = Debug|x64
+		{D210570B-F1A0-4B66-9301-F7A54978C178}.Debug|x86.ActiveCfg = Debug|Win32
+		{D210570B-F1A0-4B66-9301-F7A54978C178}.Debug|x86.Build.0 = Debug|Win32
+		{D210570B-F1A0-4B66-9301-F7A54978C178}.Release|x64.ActiveCfg = Release|x64
+		{D210570B-F1A0-4B66-9301-F7A54978C178}.Release|x64.Build.0 = Release|x64
+		{D210570B-F1A0-4B66-9301-F7A54978C178}.Release|x86.ActiveCfg = Release|Win32
+		{D210570B-F1A0-4B66-9301-F7A54978C178}.Release|x86.Build.0 = Release|Win32
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ExtensibilityGlobals) = postSolution
+		SolutionGuid = {6F277D80-00FE-40A7-96EA-CFCB4C8EFFB8}
+	EndGlobalSection
+EndGlobal
