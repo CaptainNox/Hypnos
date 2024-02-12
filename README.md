@@ -16,6 +16,8 @@ Because the NTDLL copy is made from a suspended process, the NTAPI (Native WinAP
 
 This is better than the previous methods (Hell's Gate and Halo's Gate) because Hell's Gate doesn't work when the syscalls are hooked, and Halo's Gate is unreliable as it relies on incremental syscall numbers. Which is not the case for Windows 11.
 
+We are also not overwriting the `.text` section of the loaded NTDLL dll, leaving the hooks intact. 
+
 This is a pretty reliable way of resolving syscall numbers, which will most likely continue to work for further Windows releases.
 
 ### Features
