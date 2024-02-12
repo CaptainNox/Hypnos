@@ -6,14 +6,17 @@
 
 ### How does Hypnos work?
 
-Hypnos works by spawning a suspended process, and utilizing this process to create a copy of NTDLL. From that copy, the SSNs are being resolved.
+Hypnos works by spawning a suspended process, and utilizing this process to create a copy of NTDLL. From that copy, the syscall numbers are being resolved.
 
-The PPID of the spawned process is being spoofed, to make the parent-child relationship match.
+The parent process ID of the spawned process is being spoofed, to make the parent-child less suspicious.
 
-Because the NTDLL copy is being made from a suspended process, the Win API functions are not hooked by AV/EDR.
-### Why?
+Because the NTDLL copy is made from a suspended process, the NTAPI (Native WinAPI) functions aren't hooked by AV/EDR.
 
-We do this because Hell's Gate fails when functions are hooked. This is more reliable than Halo's gate, because we don't have to rely on SSNs being incremental.
+### How is this better?
+
+This is better than the previous methods (Hell's Gate and Halo's Gate) because Hell's Gate doesn't work when the syscalls are hooked, and Halo's Gate is unreliable as it relies on incremental syscall numbers. Which is not the case for Windows 11.
+
+This is a pretty reliable way of resolving syscall numbers, which will most likely continue to work for further Windows releases.
 
 ### Features
 
@@ -23,7 +26,7 @@ We do this because Hell's Gate fails when functions are hooked. This is more rel
 
 ### How to use?
 
-First of all, you have to use the `InitHypnos()`. This will place the initial breakpoint, and register the vectored exception handler.
+First of all, you have to use the `InitHypnos()`. This will place the initial breakpoint, and register the Vectored Exception Handler (VEH).
 Then, you need to prepare the syscall by calling `PrepareSyscall()`.
 Now you can execute the NTAPI function as you wish!
 

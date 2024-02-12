@@ -104,7 +104,15 @@ UINT64 GetSymbolAddress(UINT64 moduleBase, const char* functionName) {
 #pragma region Hypnos
 
 DWORD64 FindSyscallNumber(DWORD64 functionAddress) {
-    return (WORD) * ((PBYTE)functionAddress + 4);
+    /*
+        Windows syscall calling convention
+
+            mov r10, rcx
+            mov eax, syscall_number
+            syscall
+    */
+
+    return (WORD) * ((PBYTE)functionAddress + 4); // The syscall number is at the 4th position from the function address
 }
 
 DWORD FindProcess(WCHAR* name) {
@@ -204,7 +212,7 @@ BOOL SetMainBreakpoint() {
     // Getting a handle to the current thread
     HANDLE currentThread = GetCurrentThread();
 
-    // Dynamically find the GetThreadContext and SetThreadContext functions
+    // Resolving GetThreadContext and SetThreadContext at runtime
     GetThreadContext_t pGetThreadContext = (GetThreadContext_t)GetSymbolAddress(GetModuleAddress((LPWSTR)L"KERNEL32.DLL"), "GetThreadContext");
     SetThreadContext_t pSetThreadContext = (SetThreadContext_t)GetSymbolAddress(GetModuleAddress((LPWSTR)L"KERNEL32.DLL"), "SetThreadContext");
 
